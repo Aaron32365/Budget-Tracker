@@ -7,6 +7,7 @@ fetch("/api/transaction")
   })
   .then(data => {
     // save db data on global variable
+    console.log("List of stored transactions: " + JSON.stringify(data))
     transactions = data;
 
     populateTotal();
@@ -136,7 +137,8 @@ function sendTransaction(isAdding) {
   })
   .catch(err => {
     // fetch failed, so save in indexed db
-    saveRecord(transaction);
+    saveOffline(transaction);
+    console.log("Offline transaction saved: " + JSON.stringify(transaction))
 
     // clear form
     nameEl.value = "";
@@ -151,3 +153,36 @@ document.querySelector("#add-btn").onclick = function() {
 document.querySelector("#sub-btn").onclick = function() {
   sendTransaction(false);
 };
+
+function saveOffline(data){
+  const request = window.indexedDB.open("offlineTransactionDB", 1);//offlineTransactionsDB
+
+  // Create schema
+  request.onupgradeneeded = event => {
+    const db = event.target.result;
+    
+    // Creates an object store with a listID keypath that can be used to query on.
+    const transactionStore = db.createObjectStore("offlineTransactions", {keyPath: "transID"});// transactionStore = offlineTransactions, {transID}
+    // Creates a statusIndex that we can query on.
+    transactionStore.createIndex("transactionIndex", "status"); //transactionIndex, index
+  }
+
+  // Opens a transaction, accesses the toDoList objectStore and statusIndex.
+  request.onsuccess = () => {
+    const db = request.result;
+    const transaction = db.transaction(["offlineTransactions"], "readwrite");//[offlineTransactions]
+    const transactionStore = transaction.objectStore("offlineTransactions");//offlineTransactions
+    const transactionIndex = transactionStore.index("transactionIndex");//index
+
+    // Adds data to our objectStore
+    transactionStore.add({ transID: data.date, status: "LocalStored" });//transid will be time in which transaction was made, status will be whether or not it has been stored in db
+    // transactionStore.add({ transID: "2", status: "inDB" });
+
+    // Return an item by index
+    const getRequestIdx = transactionIndex.getAll("LocalStored");
+    getRequestIdx.onsuccess = () => {
+      console.log(getRequestIdx.result); 
+    }; 
+  };
+} 
+
