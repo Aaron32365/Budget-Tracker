@@ -1,6 +1,7 @@
 let transactions = [];
 let myChart;
 
+sendLocalToDB()
 fetch("/api/transaction")
   .then(response => {
     return response.json();
@@ -155,6 +156,66 @@ document.querySelector("#sub-btn").onclick = function() {
 };
 
 function saveOffline(data){
+
+  const request = generateindexedDB()
+
+  // Opens a transaction, accesses the toDoList objectStore and statusIndex.
+  request.onsuccess = () => {
+    const db = request.result;
+    const transaction = db.transaction(["offlineTransactions"], "readwrite");//[offlineTransactions]
+    const transactionStore = transaction.objectStore("offlineTransactions");//offlineTransactions
+    const transactionIndex = transactionStore.index("transactionIndex");//index
+
+    // Adds data to our objectStore
+    transactionStore.add({ transID: data.date, status: "LocalStored", name: data.name, value: data.value });//transid will be time in which transaction was made, status will be whether or not it has been stored in db
+    // transactionStore.add({ transID: "2", status: "inDB" });
+
+    // Return an item by index
+    const getRequestIdx = transactionIndex.getAll("LocalStored");
+    getRequestIdx.onsuccess = () => {
+      console.log("this is an array of the locally stored objects: " + JSON.stringify(getRequestIdx.result));
+      // sendLocalToDB()
+    }; 
+  };
+} 
+
+async function sendLocalToDB(){
+  const request = generateindexedDB()
+
+  request.onsuccess = async function() {
+    const db = request.result
+    const transaction = db.transaction(["offlineTransactions"], "readwrite");
+    const transactionStore = transaction.objectStore("offlineTransactions");//offlineTransactions
+    const transactionIndex = transactionStore.index("transactionIndex");
+    const getRequest = transactionIndex.getAll("LocalStored")
+
+    getRequest.onsuccess = async function() {
+      console.log("getrequest in sendToLocalDB: " + JSON.stringify(getRequest.result))
+      for(let i = 0; i < getRequest.result.length; i++){
+        console.log("plus one: "+ JSON.stringify(getRequest.result[i]))
+        let data = {
+          name: getRequest.result[i].name,
+          value: getRequest.result[i].value,
+          date: getRequest.result[i].transID
+        }
+        fetch("/api/transaction", {
+          method: "POST",
+          body: JSON.stringify(data),
+          headers: {
+            Accept: "application/json, text/plain, */*",
+            "Content-Type": "application/json"
+          }
+        })
+        .then(function(response){
+          return response.json
+        })
+      }
+    }
+  }
+}
+
+
+function generateindexedDB(){
   const request = window.indexedDB.open("offlineTransactionDB", 1);//offlineTransactionsDB
 
   // Create schema
@@ -165,24 +226,8 @@ function saveOffline(data){
     const transactionStore = db.createObjectStore("offlineTransactions", {keyPath: "transID"});// transactionStore = offlineTransactions, {transID}
     // Creates a statusIndex that we can query on.
     transactionStore.createIndex("transactionIndex", "status"); //transactionIndex, index
+    transactionStore.createIndex("name", "name")
+    transactionStore.createIndex("value", "value")
   }
-
-  // Opens a transaction, accesses the toDoList objectStore and statusIndex.
-  request.onsuccess = () => {
-    const db = request.result;
-    const transaction = db.transaction(["offlineTransactions"], "readwrite");//[offlineTransactions]
-    const transactionStore = transaction.objectStore("offlineTransactions");//offlineTransactions
-    const transactionIndex = transactionStore.index("transactionIndex");//index
-
-    // Adds data to our objectStore
-    transactionStore.add({ transID: data.date, status: "LocalStored" });//transid will be time in which transaction was made, status will be whether or not it has been stored in db
-    // transactionStore.add({ transID: "2", status: "inDB" });
-
-    // Return an item by index
-    const getRequestIdx = transactionIndex.getAll("LocalStored");
-    getRequestIdx.onsuccess = () => {
-      console.log(getRequestIdx.result); 
-    }; 
-  };
-} 
-
+  return request
+}
